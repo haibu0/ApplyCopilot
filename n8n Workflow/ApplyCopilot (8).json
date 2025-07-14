@@ -1,0 +1,1152 @@
+{
+  "name": "ApplyCopilot",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/files",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "purpose",
+              "value": "ocr"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "User_Resume___pdf_"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -80,
+        -160
+      ],
+      "id": "d1a101a5-1bbe-43ea-81cc-cf8e123311e1",
+      "name": "Upload File (Binary) to Mistral",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pnFeIW6bdp8a7cIZ",
+          "name": "Mistral OCR"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.mistral.ai/v1/files/{{ $json.id }}/url",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "expiry",
+              "value": "24"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        140,
+        -160
+      ],
+      "id": "1b7b4ce1-ab36-499f-bbd2-e3070c8c5c87",
+      "name": "Get signed URL from file id",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pnFeIW6bdp8a7cIZ",
+          "name": "Mistral OCR"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/ocr",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"mistral-ocr-latest\",\n  \"document\": {\n    \"type\": \"document_url\",\n    \"document_url\": \"{{ $json.url }}\"\n  },\n  \"include_image_base64\": true\n} ",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "ocr_output.json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        360,
+        -160
+      ],
+      "id": "ee16a78a-e1a7-46db-80eb-2dfaa9a4df92",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pnFeIW6bdp8a7cIZ",
+          "name": "Mistral OCR"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Parse Resume PDF\n",
+        "height": 240,
+        "width": 790,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -95,
+        -240
+      ],
+      "id": "66c0c53d-bb51-4e21-8ebe-74e9355db15f",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "binaryPropertyName": "ocr_output.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        580,
+        -160
+      ],
+      "id": "8d35bf2c-fdfb-4a59-b1b0-d04d8489c40e",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the Resume Tailoring Engine.\n\nUse the job match report and extracted keywords to rewrite resume sections for clarity, relevance, and alignment.\n\nSteps:\n1. Reword 3–5 of the most relevant bullet points to better fit the role.\n2. Ensure rewritten points use action verbs and quantify results.\n3. Maintain the user’s original tone and honesty.\n4. Provide both:\n   a) A draft of tailored bullets\n   b) A summary of suggested resume edits\n\nOutput:\n{\n  \"revised_bullets\": [\"...\", \"...\"],\n  \"edit_summary\": \"Added action verbs, matched keywords: leadership, Python, project delivery\"\n}\n\nIf resume or keyword data is incomplete, return:\n{\n  \"error\": \"Cannot proceed without resume and job data\"\n}\n\nInputs: \n- Resume: \n{{ $('Extract from File').item.json.data.pages[0].markdown }}\n\n- Job Description: \n{{ $('Form Input').item.json['Job Description'] }}\n\n- Resume Analysis: \n{{ JSON.stringify($json.output.resume_analysis) }}\n\n- Job Description Analysis:\n{{ JSON.stringify($json.output.job_description_analysis) }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        -160
+      ],
+      "id": "1a1f9307-1866-41e8-8e58-9c6c038313ab",
+      "name": "Resume Tailoring Agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the **Company Intelligence Agent**.\n\nYour job is to gather, interpret, and summarize as much relevant public information as possible from a company’s website and/or LinkedIn profile. This information will help job applicants write tailored cover letters, outreach emails, and interview prep.\n\n---\n\n**Your Role:**  \nDeliver **detailed summaries** that reflect not just what the company says, but how it presents itself. Focus on meaning, context, and tone. Your analysis should go beyond listing facts—interpret them and explain why they matter to a prospective applicant.\n\n---\n\n**Steps:**\n\n1. **Mission & Vision:**  \n   - Extract the company’s stated mission and vision. If not explicitly available, infer from messaging across the homepage or About page.  \n   - Provide a short paragraph summarizing how the company describes its purpose and long-term goals.\n\n2. **Values & Culture:**  \n   - Identify the company’s core values and workplace culture indicators.  \n   - List 3–5 values, but accompany each with a **one-sentence explanation** in context.\n\n3. **Tone & Voice:**  \n   - Describe the tone and communication style across the website or LinkedIn.  \n   - Use adjectives (e.g., formal, witty, people-first) and give a short explanation (1–2 sentences) on how tone is expressed (e.g., via language, imagery, CTA phrasing).\n\n4. **Recent Updates:**  \n   - Pull up to 3 recent, meaningful news items, product launches, or major milestones.  \n   - Provide the **date (if available)** and **a 2–3 sentence summary** of each that highlights why it may matter to applicants.\n\n5. **Overall Company Analysis:**  \n   - Write a **detailed paragraph summary** that combines mission, values, tone, and recent news into a cohesive profile.  \n   - Think of this as a mini brief you'd give to a candidate preparing for an interview or crafting a tailored cover letter.\n\n---\n\n**Output Format:**\n```json\n{\n  \"mission\": \"Full paragraph summarizing company mission and purpose.\",\n  \"values\": [\n    { \"value\": \"Innovation\", \"description\": \"The company emphasizes continuous experimentation...\" },\n    { \"value\": \"Customer Focus\", \"description\": \"They frequently highlight customer stories and prioritize support...\" }\n  ],\n  \"tone\": \"Friendly, clear, and focused on transparency. The company uses simple, direct language and often showcases team culture through visuals.\",\n  \"recent_updates\": [\n    {\n      \"date\": \"May 2025\",\n      \"summary\": \"Launched a new AI-powered analytics platform aimed at small businesses. This shows the company’s focus on expanding into underserved markets.\"\n    },\n    {\n      \"date\": \"February 2025\",\n      \"summary\": \"Partnered with XYZ Nonprofit to support tech education in underrepresented communities—highlighting its social impact focus.\"\n    }\n  ],\n  \"overall_analysis\": \"ExampleCorp positions itself as a mission-driven, innovation-focused tech company committed to transparency and community impact. Its communication style is friendly yet professional, and it emphasizes customer success and employee wellbeing throughout its content. Recent initiatives show strategic growth in AI while maintaining a people-first identity—ideal for applicants who value purpose alongside technology.\"\n}\n```\n\nIf company data cannot be accessed, return:\n```json\n{\n  \"error\": \"Unable to retrieve company info. Check URLs.\"\n}\n```\n\n---\n\n**Input:**\n\n- Company Website Data:\n{{ JSON.stringify($json.output.filtered_crawl) }}\n",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        380
+      ],
+      "id": "42357053-0b59-4420-8961-87b00f1fba3a",
+      "name": "Company Intelligence Scraper"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the **Cover Letter Generator**.\n\nUse the user’s resume highlights, job description keywords, and company tone to write a professional, compelling one-page cover letter.\n\n---\n\n**Your Role:**  \nGenerate a custom cover letter that aligns with the company’s mission, tone, and values. Focus only on the cover letter. Do not include a recruiter email.\n\n---\n\n**Format & Structure:**\n\nFollow this three-paragraph format:\n1. **Introduction**: State the role you're applying for and show strong interest in the company.\n2. **Qualifications**: Highlight 2–3 key strengths that directly match the job description.\n3. **Closing**: Express enthusiasm for the company's mission and mention your availability or next steps.\n\nUse a **professional tone** that matches the company’s tone (formal, friendly, bold, people-first, etc.).\n\nEnd with a **professional sign-off** and a brief contact statement.\n\n---\n\n**Output Format:**\n```json\n{\n  \"cover_letter\": \"Your finalized cover letter here\"\n}\n```\n\nIf required inputs are missing, return:\n```json\n{\n  \"error\": \"['List of missing inputs']\"\n}\n```\n\n---\n\n**Inputs:**\n\n- Company Summary/Values/Tone Info:  \n{{ JSON.stringify($json.output.company_website_info) }}\n\n\n- Tailored Resume Info:\n{{ JSON.stringify($json.output.resume_tailoring_info) }}\n\n- Job Description Analysis:  \n{{ $('Job Description Analyzer').item.json.output }}\n\n- Original Resume:\n{{ $('Extract from File').item.json.data.pages[0].markdown }}\n\n",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        -260
+      ],
+      "id": "61abcf1b-e12a-4bd4-af54-ef463a78ed28",
+      "name": "Cover Letter Generator"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the Recruiter Email Generator Agent in a multi-agent job application assistant.\n\nYour task is to write a short, professional email that a student can send to a recruiter to express interest in a specific role.\n\nYou will receive:\n- The job title and a summary of key responsibilities\n- The student’s tailored resume summary or top achievements\n- The company’s tone, values, and mission\n- (Optional) The recruiter’s name or LinkedIn\n\nYour email should:\n1. Address the recruiter personally (use \"Hi [Name]\" if known; otherwise \"Hi [Team at Company]\")\n2. Mention the job title and where the student saw the listing\n3. Highlight 1–2 key strengths or relevant experiences from the resume\n4. Reflect the company’s tone (e.g. formal, innovative, collaborative)\n5. End with a clear call to action (e.g. open to chat, resume attached, thank you)\n6. Be no longer than 200 words\n\nFormat your output like this:\n{\n  \"subject_line\": \"Excited to Apply: [Job Title] at [Company]\",\n  \"email_body\": \"Hi [Recruiter Name],\\n\\n[Body content]\\n\\nBest regards,\\n[Your Name]\"\n}\n\nIf critical input is missing (e.g., no job title or resume info), return:\n{\n  \"error\": \"Cannot generate email — missing job title or resume context\"\n}\n\nInputs:\n- Company Summary/Values: \n{{ JSON.stringify($json.output.company_website_info) }}\n\n- Company Website Information:\n{{ $('Website Data Filter Agent').item.json.output }}\n\n- Job Description:\n{{ $('Form Input').item.json['Job Description'] }}\n\n- Resume:\n{{ $('Extract from File').item.json.data.pages[0].markdown }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        240
+      ],
+      "id": "c47360ec-5d2a-45c0-b941-87c780bce4a6",
+      "name": "Recruiter Email Generator"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the Output Formatter Agent.\n\nTake all the completed outputs (resume bullets, cover letter, edit summary, etc.) and organize them into a downloadable or shareable format.\n\nOutput should include:\n1. Tailored Resume (formatted)\n2. Cover Letter\n3. Recruiter Email (if any)\n4. Summary of Changes\n\nFormat sections clearly with headings, spacing, and bullet points where appropriate. Highlight user action steps (e.g., “Paste this into your email”).\n\nIf any required components are missing, note:\n{\n  \"error\": \"Output incomplete — missing resume or cover letter\"\n}\n\nInputs:\n- Resume Tailoring Agent Output:\n{{ JSON.stringify($('Resume Tailoring Agent').item.json.output.resume_tailoring_info) }}\n\n\n\n- Cover Letter Generator Output:\n{{ JSON.stringify($('Cover Letter Generator').item.json.output) }}\n\n- Recruiter Email Generator Output:\n{{ JSON.stringify($('Recruiter Email Generator').item.json.output) }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        2680,
+        40
+      ],
+      "id": "a2310979-d0bf-41ef-8e05-1b2ab0651d20",
+      "name": "Final Output Formatting Agent"
+    },
+    {
+      "parameters": {
+        "formTitle": "ApplyCopilot",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Job Description",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Company Website",
+              "placeholder": "https://myhometownuc.com/",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Company Linkedin",
+              "placeholder": "NA"
+            },
+            {
+              "fieldLabel": "Cover Letter Required?",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Yes"
+                  },
+                  {
+                    "option": "No"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "User Resume (.pdf)",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "User Linked In",
+              "placeholder": "NA"
+            },
+            {
+              "fieldLabel": "User Github",
+              "placeholder": "NA"
+            },
+            {
+              "fieldLabel": "User Portfolio",
+              "placeholder": "NA"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -300,
+        40
+      ],
+      "id": "5e9e79f7-5703-48ed-95cd-73722796f40c",
+      "name": "Form Input",
+      "webhookId": "55e64656-4fa2-4159-972a-68d78f9c13b1"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2120,
+        460
+      ],
+      "id": "e7280d2f-c505-48c0-adaf-886be4156fe1",
+      "name": "Google Gemini Chat Model4",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2120,
+        -40
+      ],
+      "id": "9991efe6-69fd-498b-b216-165a54815936",
+      "name": "Google Gemini Chat Model5",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        60
+      ],
+      "id": "1e529329-2aa0-4203-9566-4651a16c8500",
+      "name": "Google Gemini Chat Model6",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2760,
+        260
+      ],
+      "id": "c85c0329-eaef-4d6c-b964-f312fb66796d",
+      "name": "Google Gemini Chat Model7",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        610
+      ],
+      "id": "ee2787b5-339f-4226-93ba-11303ccb7bbb",
+      "name": "Google Gemini Chat Model3",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        610
+      ],
+      "id": "63a54b11-0ab0-4899-9dda-8c5642898842",
+      "name": "Google Gemini Chat Model8",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the **Company Data Preprocessor Agent** in a resume tailoring assistant designed for students.\n\nYour job is to process raw, unstructured website crawl data and extract only the **most relevant, descriptive content** that can help a downstream agent understand the company’s **mission, values, tone, and culture.**\n\n---\n\n**Your Responsibilities:**\n\n1. **Identify and extract content** from:\n   - “About Us,” “Mission,” or “Vision” sections  \n   - Company culture, leadership, or employee experience pages  \n   - Careers pages, especially sections on values, DEI, training, and employee development  \n   - 1–2 recent blog posts or news updates relevant to internal culture, purpose, or direction\n\n2. **Ignore**:\n   - Product specs or feature lists  \n   - Legal disclaimers or investor content  \n   - Generic SEO text or duplicate blocks  \n   - Sales pitches, pricing pages, or marketing fluff\n\n3. **Clean and de-duplicate content**:\n   - Keep rich, natural paragraphs that help characterize company identity  \n   - Remove broken text, repeated headers, or navigation junk  \n   - Ensure all retained content is human-readable and in context  \n\n---\n\n**Output Format:**\n```json\n{\n  \"company_name\": \"Sunrise Labs\",\n  \"mission_statement\": \"We aim to design innovative medical technology that improves patient lives and supports ethical advancement in healthcare.\",\n  \"core_values\": [\n    \"Human-centered design\",\n    \"Collaborative problem-solving\",\n    \"Commitment to learning\"\n  ],\n  \"tone_indicators\": [\"collaborative\", \"research-driven\", \"patient-focused\"],\n  \"notable_recent_updates\": [\n    \"Launched DEI mentorship initiative for interns in early 2024\",\n    \"Expanded R&D lab partnerships with two regional universities\"\n  ],\n  \"raw_reference_snippets\": {\n    \"about_us\": \"At Sunrise Labs, we believe innovation begins with empathy...\",\n    \"careers_page\": \"We invest in early career talent through internship and mentorship programs that reflect our values of inclusion and growth...\",\n    \"blog_excerpt\": \"In our May 2024 update, CEO Karen Lin shared progress on our inclusive hiring goals and community health partnerships...\"\n  }\n}\n```\n\n- `mission_statement`: Summarize in your own words if not directly stated.\n- `core_values`: Extract or infer based on repeat phrasing or culture keywords.\n- `tone_indicators`: Use 2–4 adjectives that reflect how the company *speaks* (not how you feel about it).\n- `raw_reference_snippets`: Keep content concise (2–5 sentence excerpts max) and informative.\n\n---\n\nIf no usable content is found, return:\n```json\n{\n  \"error\": \"No usable company information found in crawl\"\n}\n```\n\n---\n\n**Input:**\n\n- Crawled Website Content:  \n{{ $json.content }}\n",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        390
+      ],
+      "id": "1511d984-2a91-4dd3-a5b8-3d811473de8b",
+      "name": "Website Data Filter Agent"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "oscEYjN3ZiU0vwMf",
+          "mode": "list",
+          "cachedResultName": "Web Crawler - Gemini Compatable"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "website2crawl": "={{ $json['Company Website'] }}"
+          },
+          "matchingColumns": [
+            "website2crawl"
+          ],
+          "schema": [
+            {
+              "id": "website2crawl",
+              "displayName": "website2crawl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        870,
+        390
+      ],
+      "id": "a2ee0ade-d939-41af-97f5-9d4bc93445a5",
+      "name": "Crawl Company Website"
+    },
+    {
+      "parameters": {
+        "content": "## Crawl Company Website -> Organize Data",
+        "height": 220,
+        "width": 630,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        820,
+        330
+      ],
+      "id": "8ad4b7ca-4014-46a2-b6a2-60eb20c9530f",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1230,
+        -160
+      ],
+      "id": "b7e3573b-9e07-4ba2-bb5d-3a7ad0f94639",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1880,
+        40
+      ],
+      "id": "12019c6a-3341-4d15-9f11-ba5c31154821",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"company_website_info\": {\n  \"mission\": \"Full paragraph summarizing company mission and purpose.\",\n  \"values\": [\n    { \"value\": \"Innovation\", \"description\": \"The company emphasizes continuous experimentation...\" },\n    { \"value\": \"Customer Focus\", \"description\": \"They frequently highlight customer stories and prioritize support...\" }\n  ],\n  \"tone\": \"Friendly, clear, and focused on transparency. The company uses simple, direct language and often showcases team culture through visuals.\",\n  \"recent_updates\": [\n    {\n      \"date\": \"May 2025\",\n      \"summary\": \"Launched a new AI-powered analytics platform aimed at small businesses. This shows the company’s focus on expanding into underserved markets.\"\n    },\n    {\n      \"date\": \"February 2025\",\n      \"summary\": \"Partnered with XYZ Nonprofit to support tech education in underrepresented communities—highlighting its social impact focus.\"\n    }\n  ],\n  \"overall_analysis\": \"ExampleCorp positions itself as a mission-driven, innovation-focused tech company committed to transparency and community impact. Its communication style is friendly yet professional, and it emphasizes customer success and employee wellbeing throughout its content. Recent initiatives show strategic growth in AI while maintaining a people-first identity—ideal for applicants who value purpose alongside technology.\"\n  }\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1660,
+        610
+      ],
+      "id": "b32f4bdd-ae09-44fb-a75e-9306670986c4",
+      "name": "Structured Output Parser2"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "\n{\n  \"resume_tailoring_info\": {\n  \"revised_bullets\": [\"...\", \"...\"],\n  \"edit_summary\": \"Added action verbs, matched keywords: leadership, Python, project delivery\"\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1660,
+        60
+      ],
+      "id": "a92eee25-f244-43e1-9d78-a19a37226c23",
+      "name": "Structured Output Parser3"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        2460,
+        40
+      ],
+      "id": "bc8b8d48-89ca-440d-81b5-7e57f4d8c890",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"recruiter_ai\": {\n  \"subject_line\": \"Excited to Apply: [Job Title] at [Company]\",\n  \"email_body\": \"Hi [Recruiter Name],\\n\\n[Body content]\\n\\nBest regards,\\n[Your Name]\"\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2240,
+        460
+      ],
+      "id": "adda613a-8f69-4791-a039-aa4f5966cc66",
+      "name": "Structured Output Parser4"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"cover_letter\": \"Your finalized cover letter here\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2240,
+        -40
+      ],
+      "id": "7453a1c7-124c-4af8-9498-d3ced602fa70",
+      "name": "Structured Output Parser5"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "\n{\n  \"filtered_crawl\":{\n  \"company_name\": \"Sunrise Labs\",\n  \"mission_statement\": \"...\",\n  \"core_values\": [\"...\", \"...\"],\n  \"tone_indicators\": [\"collaborative\", \"future-focused\"],\n  \"notable_recent_updates\": [\"Launched DEI initiative in 2024\", \"Expanded internship program\"],\n  \"raw_reference_snippets\": {\n    \"about_us\": \"...\",\n    \"careers_page\": \"...\",\n    \"blog_excerpt\": \"...\"\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1300,
+        610
+      ],
+      "id": "0ac5daa7-e4c4-490c-bfd6-7899a9b89cb6",
+      "name": "Structured Output Parser6"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "17b8I-LHkxIBwhj_lcGsgP6a3SxNjfreTlr2ud0QZniw",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ $json.output }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        40
+      ],
+      "id": "a72c036b-970b-4fce-aa36-65a49644918a",
+      "name": "Google Docs",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "cLPiAwWUGCXoMPwY",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Notes\nNext Step:\nBreak the workflow down in subflows utilizing parallelization. \n\nThe agents need to be more interconnected. Ex. Resume analyzer outputs \"missing_skills\", but that is not used anywhere else.\n\nAlso, if the cover score is below a threshold, the user should be notified they are unqualified and why.\n\nAdd bots to scrape through all of the \"optional\" info. (portfolio, LinkedIn, etc...). Can use relevance for LinkedIn.\n\nDo a test-run with chatgpt to see how you would want your resume-tailoring agent output to look like.\n\nButtons to regen certain sections of the response, asking the user what change they want.\n\nBuild a frontend using streamlit",
+        "height": 400,
+        "width": 440
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -660
+      ],
+      "id": "40a462a8-54b3-4731-83da-0c9ee9cfa5df",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "The output here is bad. The output should look like this:\n\n```\n\"section\": {  \n        \"revised_bullets\": [\n        ],\n          \n\"section2\": {  \n        \"revised_bullets\": [\n        ]\n```\n",
+        "height": 240,
+        "width": 360
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        -420
+      ],
+      "id": "2187daca-a2df-4293-a6a0-9a4ebc8a4227",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"job_description_analysis\": {\n    \"responsibilities\": [\"...\"],\n    \"required_skills\": [\"...\"],\n    \"preferred_skills\": [\"...\"],\n    \"tone\": \"...\",\n    \"values\": [\"...\"]\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        940,
+        160
+      ],
+      "id": "578330d6-aade-4ad0-82d3-38f9388e5498",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"resume_analysis\":{\n  \"match_summary\": \"The resume strongly aligns with the required skills in X, Y, and Z...\",\n  \"skills_covered\": [\"...\"],\n  \"skills_missing\": [\"...\"],\n  \"coverage_score\": \"High / Medium / Low\"\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        940,
+        -240
+      ],
+      "id": "e98d1303-faf8-4891-a6c5-98609b330c22",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        820,
+        160
+      ],
+      "id": "47f0a03f-de20-4181-84ff-1cc2344a1e2d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        820,
+        -240
+      ],
+      "id": "e442be4e-1eec-4032-a3dc-63297c17f02b",
+      "name": "Google Gemini Chat Model2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tvqet678FGhEN0C5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the Job Description Analyzer Agent. Your role is to deeply analyze the job description text and extract structured, actionable components for resume tailoring.\n\nSteps:\n1. Extract key job responsibilities.\n2. List technical and soft skills required.\n3. Identify tone, company values, and culture cues (e.g., \"fast-paced\", \"collaborative\").\n4. Format your output like this:\n\n{\n  \"responsibilities\": [\"...\", \"...\"],\n  \"required_skills\": [\"...\", \"...\"],\n  \"preferred_skills\": [\"...\", \"...\"],\n  \"tone\": \"...\",\n  \"values\": [\"...\", \"...\"]\n}\n\nIf the job description is missing or malformed, return:\n{\n  \"error\": \"Invalid or incomplete job description input\"\n}\n\nInputs: \nJob Description: {{ $('Form Input').item.json['Job Description'] }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -60
+      ],
+      "id": "77dabd19-0ab8-4d24-b9b5-afb3f41df92f",
+      "name": "Job Description Analyzer"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the Resume Analyzer Agent in a resume tailoring system.\n\nYour job is to:\n- Compare a user’s resume against the job’s required skills, responsibilities, and values.\n- Identify exact and partial keyword matches.\n- Report on skill coverage, and list any missing qualifications.\n\nOutput:\n{\n  \"match_summary\": \"The resume strongly aligns with the required skills in X, Y, and Z...\",\n  \"skills_covered\": [...],\n  \"skills_missing\": [...],\n  \"coverage_score\": \"High / Medium / Low\"\n}\n\nUse bullet points where helpful. Be constructive and neutral.\n\nIf resume input is unreadable or missing, return:\n{\n  \"error\": \"Resume could not be parsed\"\n}\n\nInputs:\n- Resume: {{ $json.data.pages[0].markdown }}\n- Job Description: {{ $('Form Input').item.json['Job Description'] }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -460
+      ],
+      "id": "492874e1-8341-4a7c-966d-7d132e6f0624",
+      "name": "Resume Analyzer"
+    },
+    {
+      "parameters": {
+        "content": "Prompt example:\n\nIt should be useful, telling me exactly what to do with no \"maybes\" and should be easy for me to follow and digest."
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        -600
+      ],
+      "id": "49e487eb-87ad-420f-801d-f9b1ac7a243c",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "Prompt example:\n\nPrompt the user: anything specific that you would like to mention in the email? This would be in a node before the email generator."
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        -440
+      ],
+      "id": "156f5944-ae27-4e98-8ee9-bceb6cc9f10f",
+      "name": "Sticky Note5"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Upload File (Binary) to Mistral": {
+      "main": [
+        [
+          {
+            "node": "Get signed URL from file id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get signed URL from file id": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Job Description Analyzer",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resume Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company Intelligence Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Recruiter Email Generator": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Cover Letter Generator": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume Tailoring Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Input": {
+      "main": [
+        [
+          {
+            "node": "Upload File (Binary) to Mistral",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Crawl Company Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Output Formatting Agent": {
+      "main": [
+        [
+          {
+            "node": "Google Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Recruiter Email Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Cover Letter Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model6": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Resume Tailoring Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model7": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Final Output Formatting Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Website Data Filter Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model8": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Company Intelligence Scraper",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website Data Filter Agent": {
+      "main": [
+        [
+          {
+            "node": "Company Intelligence Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl Company Website": {
+      "main": [
+        [
+          {
+            "node": "Website Data Filter Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Resume Tailoring Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser2": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Company Intelligence Scraper",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser3": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Resume Tailoring Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Cover Letter Generator",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Recruiter Email Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Final Output Formatting Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser4": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Recruiter Email Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser5": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Cover Letter Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser6": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Website Data Filter Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Job Description Analyzer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Job Description Analyzer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Resume Analyzer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Resume Analyzer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Description Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Resume Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "75c639fd-d270-468a-a774-6e454365b8aa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3ab5683c12439c13ee772765486b197b4a2bccd3c7b7833661d08b25742014ea"
+  },
+  "id": "EKgEhsJso01E7bL2",
+  "tags": []
+}
