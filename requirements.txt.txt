@@ -1,0 +1,6 @@
+streamlit
+streamlit-nested-layout
+pandas
+numpy
+plotly
+requests
