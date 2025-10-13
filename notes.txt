@@ -1,15 +1,6 @@
-Cool AI Implementations:
+- Save each application data on the streamlit sidebar, you could just have this instead of showing
+the output below the main page. There would be an option to delete it each application data aswell.
+Would function exactly as a "Run History" module. (streamlit)
+- learn sql lite for the database
 
-- Analyze users mood to curate them a poem
-
-- Give readers quick “pop-ups” of background info—why Frost wrote “Stopping by Woods,” or what “daffodils” symbolized for Wordsworth.
-
-- What: Show a little chart (via matplotlib) of sentiment scores per line or stanza—peaks of joy, dips of sorrow. Like a little dropdown dashboard
-
-- What: After you analyze the poem, generate a custom “cover image” that evokes its mood or keywords. How: Send key phrases (“snowy evening,” “dark woods”) to DALL·E or Stable Diffusion via an API, display the returned image.
-
-- Interactive Chatbot Companion: Embed a chat widget where users can ask questions (“Why does Frost repeat ‘miles to go’?”) and get AI-driven responses.
-
-- Poem Generation & Remixing
-
-What: Give users a “Create your own stanza” feature: they enter a couple of lines and the AI completes the poem in the same style.
+- Error handling (n8n)
