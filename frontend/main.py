@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
 import sqlite3, os, json
+from docx import Document
+from io import BytesIO
 
 st.set_page_config(page_title="ApplyCopilot", layout="centered", initial_sidebar_state="collapsed")
 
@@ -98,20 +100,48 @@ with st.form("application_form"):
 
 # --- SUBMISSION HANDLER --- #
 if submitted:
+    # Check for required fields first
     if not st.session_state.job_description or not st.session_state.get(f"resume_file_{st.session_state.form_version}"):
         st.error("Please fill out all required fields marked with *.")
+    # New check for the cover letter confirmation
+    elif not st.session_state.cover_letter_required:
+        if "confirm_no_cover_letter" not in st.session_state:
+            st.session_state.confirm_no_cover_letter = False
+
+        if not st.session_state.confirm_no_cover_letter:
+            st.warning(
+                "⚠️ **Cover Letter Required?** is unchecked. Are you sure you don't want a cover letter generated?")
+            if st.button("Yes, Proceed Without Cover Letter"):
+                st.session_state.confirm_no_cover_letter = True
+                st.rerun()
+            elif st.button("No, Include Cover Letter in Response"):
+                # 🔧 FIX: update session state, not a local variable
+                st.session_state.cover_letter_required = True
+                st.rerun()
+            else:
+                st.stop()
+
+        # If confirmed, proceed to the final 'else' block below
+
+    # If all required fields are filled AND cover letter is checked or confirmed to be skipped
     else:
+        # Reset confirmation state if it was set (important if they change their mind later)
+        if "confirm_no_cover_letter" in st.session_state:
+            del st.session_state.confirm_no_cover_letter
+
         st.success("✅ Form submitted! Processing now...")
 
         payload = {
             "Job Description": st.session_state.job_description,
             "Company Website": st.session_state.company_website,
-            "Company LinkedIn": st.session_state.company_linkedin,
-            "Cover Letter Required": st.session_state.cover_letter_required,
             "User LinkedIn": st.session_state.linkedin,
             "User GitHub": st.session_state.github,
             "Recruiter Message Requests": st.session_state.recruiter_message_requests,
+            # 🔧 FIX: include these so backend knows to generate a cover letter
+            "Cover Letter Required": st.session_state.cover_letter_required,
+            "Cover Letter Requests": st.session_state.get("cover_letter_requests", ""),
         }
+
         files = {}
         up = st.session_state.get(f"resume_file_{st.session_state.form_version}")
         if up is not None:
@@ -119,14 +149,7 @@ if submitted:
 
         loading_text = [
             "Firing up the jet engines...",
-            "Checking autopilot settings...",
-            "Plotting your career trajectory...",
-            "Rewriting your story at 30,000 feet...",
-            "Scanning the job skies for opportunities...",
-            "Running final checks on your resume runway...",
-            "Assembling your application flight plan...",
-            "Powering up AI copilots and coffee...",
-            "Adjusting your experience for maximum altitude...",
+            # ... (rest of your loading text)
             "Taking off towards your dream job...",
         ]
 
@@ -146,55 +169,77 @@ if st.session_state.n8n_response:
     n8n_response = st.session_state.n8n_response
 
     # -- Now Display Outputs -- #
+    with st.expander("📊 Resume Score Chart"):
+        ratings, theta = [], []
+        for k, v in n8n_response["resume_stats"].items():
+            ratings.append(v);
+            theta.append(k)
+        ratings = ratings + [ratings[0]]
+        theta = theta + [theta[0]]
+
+        avg_score = np.mean(ratings[:-1])
+
+
+        def score_to_rgba(score, vmin=0, vmax=100, alpha=0.4):
+            norm = np.clip((score - vmin) / (vmax - vmin), 0, 1)
+            r = int(255 * (1 - norm));
+            g = int(255 * norm);
+            b = 80
+            return f"rgba({r},{g},{b},{alpha})"
+
+
+        fill_color = score_to_rgba(avg_score)
+        line_color = fill_color.replace(f",{fill_color.split(',')[-1]}", ",1.0)")
+
+        fig = go.Figure(go.Scatterpolar(
+            r=ratings, theta=theta, mode="lines+markers", line_shape="spline",
+            fill="toself", fillcolor=fill_color,
+            line=dict(color=line_color, width=2),
+            marker=dict(size=8, color=line_color, line=dict(width=1, color="white")),
+            hovertemplate="%{theta}: %{r}<extra></extra>"
+        ))
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=20, b=0),
+            polar=dict(
+                bgcolor="rgba(0,0,0,0)",
+                radialaxis=dict(visible=False, range=[0, 100], gridcolor="rgba(200,200,200,0.5)", gridwidth=1),
+                angularaxis=dict(tickfont=dict(size=12, family="Arial"),
+                                 gridcolor="rgba(200,200,200,0.5)", gridwidth=1),
+            ),
+            annotations=[dict(text=f"{avg_score:.0f}", x=0.5, y=0.5, xref="paper", yref="paper",
+                              showarrow=False, font=dict(size=28, family="Arial", color=line_color))]
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        st.markdown(n8n_response["coverageSummary"])
 
     with st.expander("📄 Resume Analysis"):
         st.markdown(n8n_response["tailored_resume"])
 
-        with st.expander("📊 Resume Score Chart"):
-            ratings, theta = [], []
-            for k, v in n8n_response["resume_stats"].items():
-                ratings.append(v); theta.append(k)
-            ratings = ratings + [ratings[0]]
-            theta = theta + [theta[0]]
-
-            avg_score = np.mean(ratings[:-1])
-
-            def score_to_rgba(score, vmin=0, vmax=100, alpha=0.4):
-                norm = np.clip((score - vmin) / (vmax - vmin), 0, 1)
-                r = int(255 * (1 - norm)); g = int(255 * norm); b = 80
-                return f"rgba({r},{g},{b},{alpha})"
-
-            fill_color = score_to_rgba(avg_score)
-            line_color = fill_color.replace(f",{fill_color.split(',')[-1]}", ",1.0)")
-
-            fig = go.Figure(go.Scatterpolar(
-                r=ratings, theta=theta, mode="lines+markers", line_shape="spline",
-                fill="toself", fillcolor=fill_color,
-                line=dict(color=line_color, width=2),
-                marker=dict(size=8, color=line_color, line=dict(width=1, color="white")),
-                hovertemplate="%{theta}: %{r}<extra></extra>"
-            ))
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=20, b=0),
-                polar=dict(
-                    bgcolor="rgba(0,0,0,0)",
-                    radialaxis=dict(visible=False, range=[0, 100], gridcolor="rgba(200,200,200,0.5)", gridwidth=1),
-                    angularaxis=dict(tickfont=dict(size=12, family="Arial"),
-                                     gridcolor="rgba(200,200,200,0.5)", gridwidth=1),
-                ),
-                annotations=[dict(text=f"{avg_score:.0f}", x=0.5, y=0.5, xref="paper", yref="paper",
-                                  showarrow=False, font=dict(size=28, family="Arial", color=line_color))]
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-            st.markdown(n8n_response["coverageSummary"])
-
     with st.expander("✉️ Cover Letter"):
-        if "cover_letter" in n8n_response:
-            st.markdown(n8n_response["cover_letter"])
-        else:
-            st.write("Cover Letter not required according to user input.")
+        if st.session_state.cover_letter_required:
+            if n8n_response.get("cover_letter"):
+                cover_letter_text = n8n_response["cover_letter"]
+                st.markdown(cover_letter_text)
+
+                # --- Convert to .docx for download ---
+                docx_buffer = BytesIO()
+                doc = Document()
+                for line in cover_letter_text.split("\n"):
+                    doc.add_paragraph(line)
+                doc.save(docx_buffer)
+                docx_buffer.seek(0)
+
+                st.download_button(
+                    label="⬇️ Download Cover Letter (.docx)",
+                    data=docx_buffer,
+                    file_name="cover_letter.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+            else:
+                st.write("Cover letter was requested, but the backend didn't return one.")
 
     with st.expander("📧 Recruiter Email / Simple Chat Message"):
         st.markdown(f"**Subject:** {n8n_response['recruiter_email']['subject']}")
