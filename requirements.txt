@@ -1,6 +1,8 @@
+requests
 streamlit
 streamlit-nested-layout
 pandas
 numpy
 plotly
-requests
+python-docx
+pillow
